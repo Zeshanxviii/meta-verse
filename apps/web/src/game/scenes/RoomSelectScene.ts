@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Room } from "shared-types";
 import { connectSocket, getSocket } from "../../services/socket.js";
 import { clearAuth } from "../../services/auth.js";
+import { FONT_KEY } from "../fonts.js";
 
 export class RoomSelectScene extends Phaser.Scene {
   private rooms: Room[] = [];
@@ -51,18 +52,8 @@ export class RoomSelectScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    const title = this.add.text(w / 2, h * 0.08, "Select a Room", {
-      fontSize: `${Math.max(24, Math.floor(h * 0.055))}px`,
-      color: "#ffffff",
-      fontFamily: "Arial",
-    }).setOrigin(0.5);
-
-    const subtitle = this.add.text(w / 2, h * 0.14, "Choose a world to enter", {
-      fontSize: `${Math.max(14, Math.floor(h * 0.025))}px`,
-      color: "#888",
-      fontFamily: "Arial",
-    }).setOrigin(0.5);
-
+    const title = this.add.bitmapText(w / 2, h * 0.08, FONT_KEY, "Select a Room", 36).setOrigin(0.5);
+    const subtitle = this.add.bitmapText(w / 2, h * 0.14, FONT_KEY, "Choose a world to enter", 22).setOrigin(0.5);
     this.container.add([title, subtitle]);
 
     this.rooms.forEach((room, i) => {
@@ -74,17 +65,8 @@ export class RoomSelectScene extends Phaser.Scene {
       bg.fillStyle(0x16213e, 1);
       bg.fillRoundedRect(w / 2 - cardW / 2, cardY - cardH / 2, cardW, cardH, 12);
 
-      const name = this.add.text(w / 2, cardY - cardH * 0.15, room.name, {
-        fontSize: `${Math.max(16, Math.floor(h * 0.032))}px`,
-        color: "#e0e0ff",
-        fontFamily: "Arial",
-      }).setOrigin(0.5);
-
-      const info = this.add.text(w / 2, cardY + cardH * 0.25, `${room.description}  •  ${room.playerCount} online`, {
-        fontSize: `${Math.max(11, Math.floor(h * 0.02))}px`,
-        color: "#777",
-        fontFamily: "Arial",
-      }).setOrigin(0.5);
+      const name = this.add.bitmapText(w / 2, cardY - cardH * 0.15, FONT_KEY, room.name, 26).setOrigin(0.5);
+      const info = this.add.bitmapText(w / 2, cardY + cardH * 0.25, FONT_KEY, `${room.description} . ${room.playerCount} online`, 16).setOrigin(0.5);
 
       const hitArea = this.add.zone(w / 2, cardY, cardW, cardH).setInteractive({ useHandCursor: true });
 
@@ -105,11 +87,7 @@ export class RoomSelectScene extends Phaser.Scene {
       this.container.add([bg, name, info, hitArea]);
     });
 
-    const signOut = this.add.text(w - 10, h - 10, "Sign Out", {
-      fontSize: `${Math.max(12, Math.floor(h * 0.022))}px`,
-      color: "#ff5555",
-      fontFamily: "Arial",
-    }).setOrigin(1, 1).setInteractive({ useHandCursor: true })
+    const signOut = this.add.bitmapText(w - 10, h - 10, FONT_KEY, "Sign Out", 18).setOrigin(1, 1).setInteractive({ useHandCursor: true })
       .on("pointerdown", () => {
         getSocket().disconnect();
         clearAuth();
@@ -122,11 +100,7 @@ export class RoomSelectScene extends Phaser.Scene {
   private buildError(msg: string) {
     const w = this.scale.width;
     const h = this.scale.height;
-    const err = this.add.text(w / 2, h - 40, `Connection error: ${msg}`, {
-      fontSize: "14px",
-      color: "#ff5555",
-      fontFamily: "Arial",
-    }).setOrigin(0.5);
+    const err = this.add.bitmapText(w / 2, h - 40, FONT_KEY, `Connection error: ${msg}`, 18).setOrigin(0.5);
     this.container.add(err);
   }
 }

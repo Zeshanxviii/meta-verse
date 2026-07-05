@@ -3,11 +3,13 @@ import type { PlayerState, ChatMessage } from "shared-types";
 import { getSocket } from "../../services/socket.js";
 import { getStoredUser } from "../../services/auth.js";
 import { voiceChat } from "../../services/voice.js";
+import { FONT_KEY } from "../fonts.js";
+import { getMap, TILE_SIZE, type MapDef } from "../maps.js";
 
 interface OtherPlayer {
   graphics: Phaser.GameObjects.Graphics;
-  label: Phaser.GameObjects.Text;
-  bubble: Phaser.GameObjects.Text | null;
+  label: Phaser.GameObjects.BitmapText;
+  bubble: Phaser.GameObjects.BitmapText | null;
   bubbleTimer: number;
   targetX: number;
   targetY: number;
@@ -16,18 +18,19 @@ interface OtherPlayer {
 export class GameScene extends Phaser.Scene {
   private roomId!: string;
   private localPlayer!: Phaser.GameObjects.Graphics;
-  private localLabel!: Phaser.GameObjects.Text;
+  private localLabel!: Phaser.GameObjects.BitmapText;
   private otherPlayers = new Map<string, OtherPlayer>();
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
   private floor!: Phaser.GameObjects.Graphics;
-  private border!: Phaser.GameObjects.Graphics;
-  private roomLabel!: Phaser.GameObjects.Text;
+  private zonesGfx!: Phaser.GameObjects.Graphics;
+  private zoneLabels: Phaser.GameObjects.BitmapText[] = [];
+  private roomLabel!: Phaser.GameObjects.BitmapText;
   private moveSpeed = 3;
   private socket = getSocket();
-  private margin = 60;
+  private mapDef!: MapDef;
 
-  private chatLog!: Phaser.GameObjects.Text;
+  private chatLog!: Phaser.GameObjects.BitmapText;
   private chatInput: HTMLInputElement | null = null;
   private isChatting = false;
   private messages: ChatMessage[] = [];
@@ -46,26 +49,15 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.floor = this.add.graphics();
-    this.border = this.add.graphics();
-    this.roomLabel = this.add.text(0, 0, "", { fontSize: "14px", color: "#aaa", fontFamily: "Arial" });
+    this.zonesGfx = this.add.graphics();
+    this.roomLabel = this.add.bitmapText(0, 0, FONT_KEY, "", 18);
 
     this.localPlayer = this.add.graphics();
     this.drawCharacter(this.localPlayer, 0x4fc3f7);
 
-    this.localLabel = this.add.text(0, 0, "You", {
-      fontSize: "12px",
-      color: "#4fc3f7",
-      fontFamily: "Arial",
-    }).setOrigin(0.5);
+    this.localLabel = this.add.bitmapText(0, 0, FONT_KEY, "You", 14).setOrigin(0.5);
 
-    this.chatLog = this.add.text(12, 0, "", {
-      fontSize: "13px",
-      color: "#ffffff",
-      fontFamily: "Arial",
-      backgroundColor: "rgba(0,0,0,0.5)",
-      padding: { x: 8, y: 4 },
-      wordWrap: { width: 400 },
-    }).setDepth(100);
+    this.chatLog = this.add.bitmapText(12, 0, FONT_KEY, "", 16).setDepth(100);
 
     this.drawFloor();
     this.scale.on("resize", () => {
@@ -119,6 +111,10 @@ export class GameScene extends Phaser.Scene {
     this.socket.off("chat:message");
     this.scale.off("resize");
     this.removeChatInput();
+    this.otherPlayers.clear();
+    this.otherPlayerIds = [];
+    for (const lbl of this.zoneLabels) lbl.destroy();
+    this.zoneLabels = [];
   }
 
   private setupSocketListeners() {
@@ -164,8 +160,8 @@ export class GameScene extends Phaser.Scene {
     if (dx !== 0 || dy !== 0) {
       const w = this.scale.width;
       const h = this.scale.height;
-      const newX = Phaser.Math.Clamp(this.localPlayer.x + dx * this.moveSpeed, this.margin, w - this.margin);
-      const newY = Phaser.Math.Clamp(this.localPlayer.y + dy * this.moveSpeed, this.margin, h - this.margin);
+      const newX = Phaser.Math.Clamp(this.localPlayer.x + dx * this.moveSpeed, 0, w);
+      const newY = Phaser.Math.Clamp(this.localPlayer.y + dy * this.moveSpeed, 0, h);
 
       this.localPlayer.setPosition(newX, newY);
       this.localLabel.setPosition(newX, newY - 30);
@@ -191,18 +187,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createMicButton() {
-    const btn = this.add.text(10, 10, "🎤 Mic Off", {
-      fontSize: "14px",
-      color: "#ff5555",
-      fontFamily: "Arial",
-      backgroundColor: "rgba(0,0,0,0.5)",
-      padding: { x: 8, y: 4 },
-    }).setOrigin(0, 0).setInteractive({ useHandCursor: true }).setDepth(200);
+    const micBtn = this.add.bitmapText(10, 10, FONT_KEY, "Mic Off", 16).setOrigin(0, 0).setInteractive({ useHandCursor: true }).setDepth(200);
+    const spkBtn = this.add.bitmapText(110, 10, FONT_KEY, "Speaker On", 16).setOrigin(0, 0).setInteractive({ useHandCursor: true }).setDepth(200);
 
-    btn.on("pointerdown", async () => {
-      const on = await voiceChat.toggle(this.otherPlayerIds);
-      btn.setText(on ? "🎤 Mic On" : "🎤 Mic Off");
-      btn.setColor(on ? "#4fc3f7" : "#ff5555");
+    micBtn.on("pointerdown", async () => {
+      const on = await voiceChat.toggleMic(this.otherPlayerIds);
+      micBtn.setText(on ? "Mic On" : "Mic Off");
+    });
+
+    spkBtn.on("pointerdown", async () => {
+      const on = voiceChat.toggleSpeaker();
+      spkBtn.setText(on ? "Speaker On" : "Speaker Off");
     });
   }
 
@@ -212,11 +207,7 @@ export class GameScene extends Phaser.Scene {
     const g = this.add.graphics();
     this.drawCharacter(g, 0xff8a65);
 
-    const label = this.add.text(0, 0, player.displayName, {
-      fontSize: "11px",
-      color: "#ff8a65",
-      fontFamily: "Arial",
-    }).setOrigin(0.5);
+    const label = this.add.bitmapText(0, 0, FONT_KEY, player.displayName, 13).setOrigin(0.5);
 
     g.setPosition(player.x, player.y);
     label.setPosition(player.x, player.y - 30);
@@ -244,13 +235,7 @@ export class GameScene extends Phaser.Scene {
 
   private showBubble(other: OtherPlayer, text: string) {
     if (other.bubble) other.bubble.destroy();
-    other.bubble = this.add.text(0, 0, text, {
-      fontSize: "12px",
-      color: "#fff",
-      fontFamily: "Arial",
-      backgroundColor: "rgba(0,0,0,0.7)",
-      padding: { x: 6, y: 3 },
-    }).setOrigin(0.5).setDepth(50);
+    other.bubble = this.add.bitmapText(0, 0, FONT_KEY, text, 14).setOrigin(0.5).setDepth(50);
     other.bubble.setPosition(other.graphics.x, other.graphics.y - 55);
     other.bubbleTimer = Date.now();
   }
@@ -271,7 +256,7 @@ export class GameScene extends Phaser.Scene {
         background: rgba(0,0,0,0.8);
         color: #fff;
         outline: none;
-        font-family: Arial;
+        font-family: monospace;
       `;
       document.body.appendChild(this.chatInput);
 
@@ -340,39 +325,58 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawFloor() {
-    this.floor.clear();
-    this.border.clear();
     const w = this.scale.width;
     const h = this.scale.height;
+    this.mapDef = getMap(this.roomId);
 
-    this.floor.fillStyle(0x0f0f23, 1);
+    this.floor.clear();
+    this.floor.fillStyle(this.mapDef.bgColor, 1);
     this.floor.fillRect(0, 0, w, h);
 
-    this.floor.lineStyle(1, 0x1a1a3e, 0.5);
-    for (let x = 0; x < w; x += 48) {
+    this.floor.lineStyle(1, this.mapDef.gridColor, this.mapDef.gridAlpha);
+    for (let x = 0; x < w; x += TILE_SIZE) {
       this.floor.moveTo(x, 0);
       this.floor.lineTo(x, h);
     }
-    for (let y = 0; y < h; y += 48) {
+    for (let y = 0; y < h; y += TILE_SIZE) {
       this.floor.moveTo(0, y);
-      this.floor.lineTo(w, y);
+      this.floor.lineTo(w, h);
     }
     this.floor.strokePath();
 
-    this.border.lineStyle(3, 0x4a4a8a, 1);
-    this.border.strokeRect(this.margin, this.margin, w - this.margin * 2, h - this.margin * 2);
+    this.zonesGfx.clear();
+    for (const zn of this.mapDef.zones) {
+      this.zonesGfx.fillStyle(zn.color, zn.alpha);
+      this.zonesGfx.fillRect(zn.x, zn.y, zn.w, zn.h);
+      this.zonesGfx.lineStyle(2, zn.color, 0.5);
+      this.zonesGfx.strokeRect(zn.x, zn.y, zn.w, zn.h);
+    }
+
+    for (const wall of this.mapDef.walls) {
+      this.zonesGfx.fillStyle(this.mapDef.wallColor, 0.4);
+      this.zonesGfx.fillRect(wall.x, wall.y, wall.w, wall.h);
+    }
+
+    for (const lbl of this.zoneLabels) lbl.destroy();
+    this.zoneLabels = [];
+    for (const zn of this.mapDef.zones) {
+      const lbl = this.add.bitmapText(zn.x + zn.w / 2, zn.y + zn.h / 2, FONT_KEY, zn.name, 13)
+        .setOrigin(0.5).setTint(zn.color).setAlpha(0.7);
+      this.zoneLabels.push(lbl);
+    }
 
     this.roomLabel.setText(`Room: ${this.roomId}  |  Enter to chat, ESC to leave`);
     this.roomLabel.setPosition(w / 2, 15);
 
     if (this.localPlayer) {
-      this.localPlayer.x = Phaser.Math.Clamp(this.localPlayer.x, this.margin, w - this.margin);
-      this.localPlayer.y = Phaser.Math.Clamp(this.localPlayer.y, this.margin, h - this.margin);
+      this.localPlayer.x = Phaser.Math.Clamp(this.localPlayer.x, 0, w);
+      this.localPlayer.y = Phaser.Math.Clamp(this.localPlayer.y, 0, h);
       this.localLabel.setPosition(this.localPlayer.x, this.localPlayer.y - 30);
     }
   }
 
   private leaveRoom() {
+    this.socket.emit("room:leave");
     this.socket.off("player:joined");
     this.socket.off("player:moved");
     this.socket.off("player:left");

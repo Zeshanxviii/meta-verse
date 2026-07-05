@@ -6,13 +6,24 @@ type PeerMap = Map<string, SimplePeer.Instance>;
 type AudioMap = Map<string, HTMLAudioElement>;
 type Callback = (enabled: boolean) => void;
 
+const ICE_SERVERS = {
+  config: {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ],
+  },
+};
+
 class VoiceChatManager {
   private peers: PeerMap = new Map();
   private audioElements: AudioMap = new Map();
   private localStream: MediaStream | null = null;
-  private enabled = false;
+  private micEnabled = false;
+  private speakerMuted = false;
   private listeners = new Set<Callback>();
   private initialized = false;
+  private pendingSignals: Array<{ from: string; signal: SignalData }> = [];
 
   async init() {
     if (this.initialized) return;
@@ -24,16 +35,23 @@ class VoiceChatManager {
     socket.on("signal", (data: { from: string; signal: SignalData }) => {
       if (data.from === myId) return;
 
-      let peer = this.peers.get(data.from);
-      if (!peer) {
-        if (!this.localStream) return;
-        peer = new SimplePeer({ initiator: false, stream: this.localStream, trickle: false });
-        this.setupPeer(peer, data.from);
-        this.peers.set(data.from, peer);
+      if (!this.localStream) {
+        this.pendingSignals.push(data);
+        return;
       }
 
-      peer.signal(data.signal);
+      this.handleSignal(data);
     });
+  }
+
+  private handleSignal(data: { from: string; signal: SignalData }) {
+    let peer = this.peers.get(data.from);
+    if (!peer) {
+      peer = new SimplePeer({ initiator: false, stream: this.localStream!, trickle: true, ...ICE_SERVERS });
+      this.setupPeer(peer, data.from);
+      this.peers.set(data.from, peer);
+    }
+    peer.signal(data.signal);
   }
 
   private setupPeer(peer: SimplePeer.Instance, peerId: string) {
@@ -44,11 +62,18 @@ class VoiceChatManager {
     });
 
     peer.on("stream", (stream: MediaStream) => {
+      const existing = this.audioElements.get(peerId);
+      if (existing) {
+        existing.srcObject = stream;
+        return;
+      }
+
       const audio = document.createElement("audio");
       audio.srcObject = stream;
       audio.autoplay = true;
       (audio as unknown as Record<string, unknown>).playsInline = true;
       audio.style.display = "none";
+      audio.muted = this.speakerMuted;
       document.body.appendChild(audio);
       audio.play().catch((e) => console.warn("Voice play error:", e));
       this.audioElements.set(peerId, audio);
@@ -75,33 +100,41 @@ class VoiceChatManager {
   }
 
   async connectTo(peerId: string) {
-    if (!this.localStream || this.peers.has(peerId) || peerId === getStoredUser()?.id) return;
+    if (!this.localStream || peerId === getStoredUser()?.id) return;
+    if (this.peers.has(peerId)) return;
 
-    const peer = new SimplePeer({ initiator: true, stream: this.localStream, trickle: false });
+    const peer = new SimplePeer({ initiator: true, stream: this.localStream, trickle: true, ...ICE_SERVERS });
     this.setupPeer(peer, peerId);
     this.peers.set(peerId, peer);
   }
 
-  async toggle(peerIds: string[] = []): Promise<boolean> {
-    if (this.enabled) {
+  async toggleMic(peerIds: string[] = []): Promise<boolean> {
+    if (this.micEnabled) {
       this.disable();
     } else {
       await this.enable(peerIds);
     }
-    return this.enabled;
+    return this.micEnabled;
   }
 
   private async enable(peerIds: string[]) {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      this.enabled = true;
+      this.micEnabled = true;
+
       for (const id of peerIds) {
         this.connectTo(id);
       }
+
+      for (const pending of this.pendingSignals) {
+        this.handleSignal(pending);
+      }
+      this.pendingSignals = [];
+
       this.notify();
     } catch {
       this.localStream = null;
-      this.enabled = false;
+      this.micEnabled = false;
       this.notify();
     }
   }
@@ -113,12 +146,23 @@ class VoiceChatManager {
     this.peers.clear();
     this.audioElements.forEach((a) => { a.pause(); a.srcObject = null; a.remove(); });
     this.audioElements.clear();
-    this.enabled = false;
+    this.micEnabled = false;
+    this.pendingSignals = [];
     this.notify();
   }
 
-  isEnabled() {
-    return this.enabled;
+  toggleSpeaker(): boolean {
+    this.speakerMuted = !this.speakerMuted;
+    this.audioElements.forEach((a) => { a.muted = this.speakerMuted; });
+    return !this.speakerMuted;
+  }
+
+  isSpeakerOn(): boolean {
+    return !this.speakerMuted;
+  }
+
+  isMicEnabled() {
+    return this.micEnabled;
   }
 
   onToggle(cb: Callback) {
@@ -127,13 +171,14 @@ class VoiceChatManager {
   }
 
   private notify() {
-    this.listeners.forEach((cb) => cb(this.enabled));
+    this.listeners.forEach((cb) => cb(this.micEnabled));
   }
 
   destroy() {
     this.disable();
     this.listeners.clear();
     this.initialized = false;
+    this.pendingSignals = [];
   }
 }
 

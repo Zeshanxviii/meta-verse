@@ -1,3 +1,4 @@
+import "./polyfills.js";
 import "./style.css";
 import Phaser from "phaser";
 import { loginWithGoogle, devLogin, getStoredToken, clearAuth, onAuthChange } from "./services/auth.js";
@@ -15,6 +16,44 @@ function startGame() {
   }
 
   game = new Phaser.Game({ ...gameConfig, parent: app });
+}
+
+function showNameModal(onSubmit: (name: string) => void) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+
+  overlay.innerHTML = `
+    <div class="modal-card glass-panel">
+      <h2 class="gradient-text" style="margin:0 0 8px;font-size:22px;">Enter your name</h2>
+      <p style="margin:0 0 20px;color:#999;font-size:14px;">Choose a display name to enter the world</p>
+      <input type="text" id="modal-name-input" class="modal-input" placeholder="Display name..." value="Dev User" maxlength="20" autofocus />
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button id="modal-cancel-btn" class="btn btn-cancel">Cancel</button>
+        <button id="modal-submit-btn" class="btn btn-primary">Enter</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const input = overlay.querySelector("#modal-name-input") as HTMLInputElement;
+  const submitBtn = overlay.querySelector("#modal-submit-btn") as HTMLButtonElement;
+  const cancelBtn = overlay.querySelector("#modal-cancel-btn") as HTMLButtonElement;
+
+  const close = () => { overlay.remove(); };
+
+  const submit = () => {
+    const name = input.value.trim() || "Dev User";
+    close();
+    onSubmit(name);
+  };
+
+  submitBtn.addEventListener("click", submit);
+  cancelBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") close(); });
+
+  setTimeout(() => input.focus(), 50);
 }
 
 function renderAuth() {
@@ -66,15 +105,16 @@ function renderAuth() {
     </div>
   `;
 
-  document.getElementById("dev-login-btn")?.addEventListener("click", async () => {
-    const name = prompt("Enter your display name:", "Dev User") || "Dev User";
-    try {
-      await devLogin(name);
-      startGame();
-    } catch (err) {
-      console.error("Dev login failed:", err);
-      alert("Dev login failed");
-    }
+  document.getElementById("dev-login-btn")?.addEventListener("click", () => {
+    showNameModal(async (name) => {
+      try {
+        await devLogin(name);
+        startGame();
+      } catch (err) {
+        console.error("Dev login failed:", err);
+        alert("Dev login failed");
+      }
+    });
   });
 }
 

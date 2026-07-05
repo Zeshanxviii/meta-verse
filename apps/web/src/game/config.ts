@@ -11,9 +11,10 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   scale: {
     mode: Phaser.Scale.ScaleModes.RESIZE,
   },
-  antialias: true,
-  roundPixels: true,
-  autoRound: true,
+  antialias: false,
+  pixelArt: false,
+  roundPixels: false,
+  autoRound: false,
 };
 
 export type LogoutFn = () => void;

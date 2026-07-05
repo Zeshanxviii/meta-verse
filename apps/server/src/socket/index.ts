@@ -91,6 +91,15 @@ export function setupSocket(httpServer: HttpServer) {
       socket.emit("chat:message", msg);
     });
 
+    socket.on("room:leave", () => {
+      if (currentRoom) {
+        socket.leave(currentRoom);
+        leaveRoom(currentRoom, user.userId);
+        socket.to(currentRoom).emit("player:left", { playerId: user.userId });
+        currentRoom = null;
+      }
+    });
+
     socket.on("signal", (data: { to: string; signal: unknown }) => {
       if (!currentRoom) return;
       socket.to(currentRoom).emit("signal", {
