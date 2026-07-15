@@ -8,6 +8,20 @@
       "when": 1783241802390,
       "tag": "0000_small_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783863881086,
+      "tag": "0001_overconfident_brood",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783864549761,
+      "tag": "0002_chunky_terror",
+      "breakpoints": true
     }
   ]
 }

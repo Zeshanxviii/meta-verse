@@ -20,7 +20,8 @@
     "jsonwebtoken": "^9.0.3",
     "postgres": "^3.4.9",
     "shared-types": "workspace:*",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -28,6 +29,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.3",
+    "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3"

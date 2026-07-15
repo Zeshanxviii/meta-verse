@@ -36,3 +36,11 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+apps/server/drizzle/0001_overconfident_brood.sql
+apps/server/drizzle/0002_chunky_terror.sql
+apps/server/drizzle/meta/_journal.json
+apps/server/drizzle/meta/0001_snapshot.json
+apps/server/drizzle/meta/0002_snapshot.json
+.gitignore
+pnpm-lock.yaml
+apps/server/drizzle/meta/_journal.json

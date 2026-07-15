@@ -21,12 +21,14 @@ export class RoomSelectScene extends Phaser.Scene {
 
     const socket = connectSocket();
 
+    socket.on("connect", () => {
+      socket.emit("rooms:list");
+    });
+
     socket.on("rooms:list", (rooms: Room[]) => {
       this.rooms = rooms;
       this.buildUI();
     });
-
-    socket.emit("rooms:list");
 
     socket.on("room:joined", (data: { roomId: string; players: unknown[] }) => {
       socket.off("rooms:list");
