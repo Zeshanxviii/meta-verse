@@ -1,0 +1,9 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "pnpm install && pnpm --filter server build"
+  },
+  "deploy": {
+    "startCommand": "pnpm --filter server start"
+  }
+}
